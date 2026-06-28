@@ -99,9 +99,14 @@ def collect_trajectories(num_traj, traj_len):
     for _ in range(num_traj):
         w = GridWorld()
         w.load_png(WORLD_PATH)
-        # Random start pose on empty cells
-        start_x = random.randint(0, 3)  # left side (before wall)
-        start_y = random.randint(0, 9)
+        # Random start pose on any valid cell (both sides of wall)
+        while True:
+            start_x = random.randint(0, 9)
+            start_y = random.randint(0, 9)
+            # Skip walls/doors - robot must start on walkable cell
+            obs_check = w.get_observation()
+            if obs_check["grid"][start_y, start_x] in (15, 2):  # empty or goal
+                break
         start_dir = random.randint(0, 3)
         w.set_start_pose(start_x, start_y, start_dir)
 
