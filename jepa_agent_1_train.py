@@ -164,6 +164,7 @@ def train():
     print("\nTraining...")
     n_samples = len(raw_data)
     losses = []
+    train_start = time.time()
 
     for epoch in range(EPOCHS):
         # Shuffle
@@ -208,6 +209,8 @@ def train():
             print(f"  Epoch {epoch:3d}/{EPOCHS} | loss = {avg_loss:.6f} | lr = {scheduler.get_last_lr()[0]:.6f}")
 
     print(f"\nFinal loss: {losses[-1]:.6f}")
+    train_time = time.time() - train_start
+    print(f"Training time: {train_time:.1f}s")
 
     # ----------------------------
     # Quick sanity tests
@@ -281,6 +284,7 @@ def train():
         "batch_size": BATCH_SIZE,
         "lr": LR,
         "ema_decay": EMA_DECAY,
+        "train_time_seconds": round(train_time, 2),
         "final_loss": losses[-1],
         "loss_history": losses,
         "tests": {
