@@ -144,7 +144,6 @@ class GridWorld:
         cell = self.grid[fy, fx]
         if self.robot_inventory == CELL_KEY and cell == CELL_DOOR_CLOSED:
             self.grid[fy, fx] = CELL_DOOR_OPEN
-            self.robot_inventory = None
             return True
         return False
 
