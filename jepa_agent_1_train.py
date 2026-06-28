@@ -29,11 +29,11 @@ NUM_ACTIONS = 7
 INPUT_DIM = 104  # 100 grid cells + x + y + dir + inventory
 
 # Training params
-NUM_TRAJECTORIES = 200
-TRAJECTORY_LEN = 100
-BATCH_SIZE = 64
-EPOCHS = 100
-LR = 3e-4
+NUM_TRAJECTORIES = 100
+TRAJECTORY_LEN = 10000
+BATCH_SIZE = 256
+EPOCHS = 30
+LR = 5e-4
 EMA_DECAY = 0.99
 
 
@@ -165,6 +165,7 @@ def train():
     n_samples = len(raw_data)
     losses = []
     train_start = time.time()
+    print(f"  Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     for epoch in range(EPOCHS):
         # Shuffle
