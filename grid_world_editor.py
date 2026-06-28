@@ -148,6 +148,19 @@ class GridWorld:
             return True
         return False
 
+    def drop_object(self):
+        """Drop held object onto cell in front of robot if that cell is empty."""
+        if self.robot_inventory is None:
+            return False
+        fx, fy = self.front_cell()
+        if not self.in_bounds(fx, fy):
+            return False
+        if self.grid[fy, fx] != CELL_EMPTY:
+            return False
+        self.grid[fy, fx] = self.robot_inventory
+        self.robot_inventory = None
+        return True
+
     def _update_doors(self):
         """Close open doors if robot distance > 1."""
         for y in range(self.height):
@@ -226,7 +239,7 @@ class GridWorldEditor:
         main_frame.pack(fill=tk.BOTH, expand=True)
 
         # Left panel - tools
-        tool_frame = tk.Frame(main_frame, width=160, padx=5, pady=5)
+        tool_frame = tk.Frame(main_frame, width=192, padx=5, pady=5)
         tool_frame.pack(side=tk.LEFT, fill=tk.Y)
         tool_frame.pack_propagate(False)
 
@@ -265,6 +278,8 @@ class GridWorldEditor:
                   command=self._action_pickup).pack(pady=1)
         tk.Button(tool_frame, text="Use Object", width=12,
                   command=self._action_use).pack(pady=1)
+        tk.Button(tool_frame, text="Drop", width=12,
+                  command=self._action_drop).pack(pady=1)
 
         # Inventory label
         tk.Label(tool_frame, text="", height=1).pack()
@@ -277,7 +292,7 @@ class GridWorldEditor:
                   command=self._print_observation).pack(pady=5)
 
         # Right panel - matplotlib canvas
-        self.fig, self.ax = plt.subplots(1, 1, figsize=(6, 6))
+        self.fig, self.ax = plt.subplots(1, 1, figsize=(7.2, 7.2))
         self.fig.subplots_adjust(left=0.02, right=0.98, top=0.98, bottom=0.02)
 
         canvas_frame = tk.Frame(main_frame)
@@ -437,6 +452,12 @@ class GridWorldEditor:
         self._render()
         if not success:
             self.inventory_label.config(text="Inventory: (can't use here)")
+
+    def _action_drop(self):
+        success = self.world.drop_object()
+        self._render()
+        if not success:
+            self.inventory_label.config(text="Inventory: (can't drop here)")
 
     def _print_observation(self):
         obs = self.world.get_observation()
