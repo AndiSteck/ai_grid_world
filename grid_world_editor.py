@@ -506,6 +506,56 @@ class GridWorldEditor:
         plt.close(self.fig)
         self.root.destroy()
 
+    # --- Public API ---
+    # Action indices:
+    #   0=forward, 1=backward, 2=turn_left, 3=turn_right,
+    #   4=pickup, 5=use_object, 6=drop
+    ACTIONS = ["forward", "backward", "turn_left", "turn_right",
+               "pickup", "use_object", "drop"]
+
+    def do_action(self, action_id):
+        """Execute a robot action by integer index. Returns True if action had effect."""
+        handlers = [
+            self.world.move_forward,
+            self.world.move_backward,
+            self.world.turn_left,
+            self.world.turn_right,
+            self.world.pickup,
+            self.world.use_object,
+            self.world.drop_object,
+        ]
+        if not 0 <= action_id < len(handlers):
+            raise ValueError(f"action_id must be 0-{len(handlers)-1}, got {action_id}")
+        result = handlers[action_id]()
+        self._render()
+        return result
+
+    def get_obs(self):
+        """Return current observation dict: grid, pose, inventory."""
+        return self.world.get_observation()
+
+    def load(self, filepath):
+        """Load world from PNG file."""
+        if self.world.load_png(filepath):
+            self.current_file = filepath
+            self.root.title(f"Grid World Editor - {filepath}")
+            self._render()
+            return True
+        return False
+
+    def save(self):
+        """Save world to current file. Returns False if no file set."""
+        if self.current_file:
+            self.world.save_png(self.current_file)
+            return True
+        return False
+
+    def save_as(self, filepath):
+        """Save world to specified PNG file."""
+        self.world.save_png(filepath)
+        self.current_file = filepath
+        self.root.title(f"Grid World Editor - {filepath}")
+
 
 # ----------------------------
 # Main
