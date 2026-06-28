@@ -8,32 +8,19 @@ import random
 import numpy as np
 
 sys.path.insert(0, "/workspaces/python_play")
-from grid_world_editor import GridWorld, CELL_GOAL, DIR_EAST
+from grid_world_editor import GridWorld, DIR_EAST
 
 
 def run_episode(max_steps=200000):
     w = GridWorld()
     w.load_png("/workspaces/python_play/worlds/world1.png")
-    w.robot_x, w.robot_y, w.robot_dir = 0, 0, DIR_EAST
+    w.set_start_pose(0, 0, DIR_EAST)
 
     for step in range(max_steps):
         action = random.randint(0, 6)
-        if action == 0:
-            w.move_forward()
-        elif action == 1:
-            w.move_backward()
-        elif action == 2:
-            w.turn_left()
-        elif action == 3:
-            w.turn_right()
-        elif action == 4:
-            w.pickup()
-        elif action == 5:
-            w.use_object()
-        elif action == 6:
-            w.drop_object()
+        w.do_action(action)
 
-        if w.grid[w.robot_y, w.robot_x] == CELL_GOAL:
+        if w.on_goal():
             return step + 1
     return -1
 

@@ -67,119 +67,151 @@ TOOL_NAMES = {
 # ----------------------------
 class GridWorld:
     def __init__(self):
-        self.width = 10
-        self.height = 10
-        self.grid = np.full((self.height, self.width), CELL_EMPTY, dtype=np.uint8)
+        self._width = 10
+        self._height = 10
+        self._grid = np.full((self._height, self._width), CELL_EMPTY, dtype=np.uint8)
         # Robot state
-        self.robot_x = 0
-        self.robot_y = 0
-        self.robot_dir = DIR_EAST  # facing right
-        self.robot_inventory = None  # None or cell type value
+        self._robot_x = 0
+        self._robot_y = 0
+        self._robot_dir = DIR_EAST  # facing right
+        self._robot_inventory = None  # None or cell type value
 
     def reset(self):
-        self.grid = np.full((self.height, self.width), CELL_EMPTY, dtype=np.uint8)
-        self.robot_x = 0
-        self.robot_y = 0
-        self.robot_dir = DIR_EAST
-        self.robot_inventory = None
+        self._grid = np.full((self._height, self._width), CELL_EMPTY, dtype=np.uint8)
+        self._robot_x = 0
+        self._robot_y = 0
+        self._robot_dir = DIR_EAST
+        self._robot_inventory = None
 
-    def in_bounds(self, x, y):
-        return 0 <= x < self.width and 0 <= y < self.height
+    def set_start_pose(self, x, y, direction):
+        """Set robot starting pose."""
+        self._robot_x = x
+        self._robot_y = y
+        self._robot_dir = direction
 
-    def front_cell(self):
+    def on_goal(self):
+        """Return True if robot is currently on the goal cell."""
+        return self._grid[self._robot_y, self._robot_x] == CELL_GOAL
+
+    def _in_bounds(self, x, y):
+        return 0 <= x < self._width and 0 <= y < self._height
+
+    def _front_cell(self):
         """Return (x, y) of cell in front of robot."""
-        fx = self.robot_x + DIR_DX[self.robot_dir]
-        fy = self.robot_y + DIR_DY[self.robot_dir]
+        fx = self._robot_x + DIR_DX[self._robot_dir]
+        fy = self._robot_y + DIR_DY[self._robot_dir]
         return fx, fy
 
-    def can_move_to(self, x, y):
-        if not self.in_bounds(x, y):
+    def _can_move_to(self, x, y):
+        if not self._in_bounds(x, y):
             return False
-        cell = self.grid[y, x]
+        cell = self._grid[y, x]
         if cell == CELL_WALL or cell == CELL_DOOR_CLOSED:
             return False
         return True
 
-    def move_forward(self):
-        fx, fy = self.front_cell()
-        if self.can_move_to(fx, fy):
-            self.robot_x = fx
-            self.robot_y = fy
+    def _move_forward(self):
+        fx, fy = self._front_cell()
+        if self._can_move_to(fx, fy):
+            self._robot_x = fx
+            self._robot_y = fy
         self._update_doors()
 
-    def move_backward(self):
+    def _move_backward(self):
         # Move opposite to facing direction
-        bx = self.robot_x - DIR_DX[self.robot_dir]
-        by = self.robot_y - DIR_DY[self.robot_dir]
-        if self.can_move_to(bx, by):
-            self.robot_x = bx
-            self.robot_y = by
+        bx = self._robot_x - DIR_DX[self._robot_dir]
+        by = self._robot_y - DIR_DY[self._robot_dir]
+        if self._can_move_to(bx, by):
+            self._robot_x = bx
+            self._robot_y = by
         self._update_doors()
 
-    def turn_left(self):
-        self.robot_dir = (self.robot_dir - 1) % 4
+    def _turn_left(self):
+        self._robot_dir = (self._robot_dir - 1) % 4
         self._update_doors()
 
-    def turn_right(self):
-        self.robot_dir = (self.robot_dir + 1) % 4
+    def _turn_right(self):
+        self._robot_dir = (self._robot_dir + 1) % 4
         self._update_doors()
 
-    def pickup(self):
+    def _pickup(self):
         """Pick up object in front of robot if inventory is empty."""
-        fx, fy = self.front_cell()
-        if not self.in_bounds(fx, fy):
+        fx, fy = self._front_cell()
+        if not self._in_bounds(fx, fy):
             return False
-        cell = self.grid[fy, fx]
-        if self.robot_inventory is None and cell == CELL_KEY:
-            self.robot_inventory = cell
-            self.grid[fy, fx] = CELL_EMPTY
+        cell = self._grid[fy, fx]
+        if self._robot_inventory is None and cell == CELL_KEY:
+            self._robot_inventory = cell
+            self._grid[fy, fx] = CELL_EMPTY
             return True
         return False
 
-    def use_object(self):
+    def _use_object(self):
         """Use held object on cell in front of robot."""
-        fx, fy = self.front_cell()
-        if not self.in_bounds(fx, fy):
+        fx, fy = self._front_cell()
+        if not self._in_bounds(fx, fy):
             return False
-        cell = self.grid[fy, fx]
-        if self.robot_inventory == CELL_KEY and cell == CELL_DOOR_CLOSED:
-            self.grid[fy, fx] = CELL_DOOR_OPEN
+        cell = self._grid[fy, fx]
+        if self._robot_inventory == CELL_KEY and cell == CELL_DOOR_CLOSED:
+            self._grid[fy, fx] = CELL_DOOR_OPEN
             return True
         return False
 
-    def drop_object(self):
+    def _drop_object(self):
         """Drop held object onto cell in front of robot if that cell is empty."""
-        if self.robot_inventory is None:
+        if self._robot_inventory is None:
             return False
-        fx, fy = self.front_cell()
-        if not self.in_bounds(fx, fy):
+        fx, fy = self._front_cell()
+        if not self._in_bounds(fx, fy):
             return False
-        if self.grid[fy, fx] != CELL_EMPTY:
+        if self._grid[fy, fx] != CELL_EMPTY:
             return False
-        self.grid[fy, fx] = self.robot_inventory
-        self.robot_inventory = None
+        self._grid[fy, fx] = self._robot_inventory
+        self._robot_inventory = None
         return True
+
+    # --- Public API ---
+    # Action indices:
+    #   0=forward, 1=backward, 2=turn_left, 3=turn_right,
+    #   4=pickup, 5=use_object, 6=drop
+    ACTIONS = ["forward", "backward", "turn_left", "turn_right",
+               "pickup", "use_object", "drop"]
+
+    def do_action(self, action_id):
+        """Execute a robot action by integer index. Returns result of action."""
+        handlers = [
+            self._move_forward,
+            self._move_backward,
+            self._turn_left,
+            self._turn_right,
+            self._pickup,
+            self._use_object,
+            self._drop_object,
+        ]
+        if not 0 <= action_id < len(handlers):
+            raise ValueError(f"action_id must be 0-{len(handlers)-1}, got {action_id}")
+        return handlers[action_id]()
 
     def _update_doors(self):
         """Close open doors if robot distance > 1."""
-        for y in range(self.height):
-            for x in range(self.width):
-                if self.grid[y, x] == CELL_DOOR_OPEN:
-                    dist = abs(x - self.robot_x) + abs(y - self.robot_y)
+        for y in range(self._height):
+            for x in range(self._width):
+                if self._grid[y, x] == CELL_DOOR_OPEN:
+                    dist = abs(x - self._robot_x) + abs(y - self._robot_y)
                     if dist > 1:
-                        self.grid[y, x] = CELL_DOOR_CLOSED
+                        self._grid[y, x] = CELL_DOOR_CLOSED
 
     def get_observation(self):
         """Return observation: grid values (0-15), robot pose (x, y, yaw), and inventory."""
         return {
-            "grid": self.grid.copy(),
-            "pose": (self.robot_x, self.robot_y, self.robot_dir),
-            "inventory": self.robot_inventory,  # None or cell type (e.g. 14 = key)
+            "grid": self._grid.copy(),
+            "pose": (self._robot_x, self._robot_y, self._robot_dir),
+            "inventory": self._robot_inventory,  # None or cell type (e.g. 14 = key)
         }
 
     def save_png(self, filepath):
         """Save world as 16-color VGA indexed PNG."""
-        img = Image.new("P", (self.width, self.height))
+        img = Image.new("P", (self._width, self._height))
         # Set palette
         palette = []
         for r, g, b in VGA_PALETTE:
@@ -188,22 +220,22 @@ class GridWorld:
         palette.extend([0] * (768 - len(palette)))
         img.putpalette(palette)
         # Set pixels
-        for y in range(self.height):
-            for x in range(self.width):
-                img.putpixel((x, y), int(self.grid[y, x]))
+        for y in range(self._height):
+            for x in range(self._width):
+                img.putpixel((x, y), int(self._grid[y, x]))
         img.save(filepath)
 
     def load_png(self, filepath):
         """Load world from indexed PNG."""
         img = Image.open(filepath)
         img = img.convert("P")
-        if img.size != (self.width, self.height):
-            messagebox.showerror("Error", f"Image must be {self.width}x{self.height}")
+        if img.size != (self._width, self._height):
+            messagebox.showerror("Error", f"Image must be {self._width}x{self._height}")
             return False
-        for y in range(self.height):
-            for x in range(self.width):
+        for y in range(self._height):
+            for x in range(self._width):
                 val = img.getpixel((x, y))
-                self.grid[y, x] = min(val, 15)
+                self._grid[y, x] = min(val, 15)
         return True
 
 
@@ -339,7 +371,7 @@ class GridWorldEditor:
             return None, None
         gx = int(event.xdata)
         gy = int(event.ydata)
-        if 0 <= gx < self.world.width and 0 <= gy < self.world.height:
+        if 0 <= gx < self.world._width and 0 <= gy < self.world._height:
             return gx, gy
         return None, None
 
@@ -350,13 +382,13 @@ class GridWorldEditor:
         if gx is None:
             return
         if self._place_robot:
-            self.world.robot_x = gx
-            self.world.robot_y = gy
+            self.world._robot_x = gx
+            self.world._robot_y = gy
             self._place_robot = False
             self._highlight_tool()
         else:
             self.drawing = True
-            self.world.grid[gy, gx] = self.current_tool
+            self.world._grid[gy, gx] = self.current_tool
         self._render()
 
     def _on_canvas_motion(self, event):
@@ -365,7 +397,7 @@ class GridWorldEditor:
         gx, gy = self._canvas_to_grid(event)
         if gx is None:
             return
-        self.world.grid[gy, gx] = self.current_tool
+        self.world._grid[gy, gx] = self.current_tool
         self._render()
 
     def _on_canvas_release(self, event):
@@ -375,86 +407,86 @@ class GridWorldEditor:
     def _render(self):
         self.ax.clear()
         # Build RGB image
-        img = np.zeros((self.world.height, self.world.width, 3), dtype=np.uint8)
-        for y in range(self.world.height):
-            for x in range(self.world.width):
-                img[y, x] = VGA_PALETTE[self.grid_val(x, y)]
+        img = np.zeros((self.world._height, self.world._width, 3), dtype=np.uint8)
+        for y in range(self.world._height):
+            for x in range(self.world._width):
+                img[y, x] = VGA_PALETTE[self._grid_val(x, y)]
 
-        self.ax.imshow(img, origin="upper", extent=[0, self.world.width, self.world.height, 0],
+        self.ax.imshow(img, origin="upper", extent=[0, self.world._width, self.world._height, 0],
                        interpolation="nearest")
 
         # Draw grid lines
-        for i in range(self.world.width + 1):
+        for i in range(self.world._width + 1):
             self.ax.axvline(i, color="gray", linewidth=0.5, alpha=0.5)
-        for i in range(self.world.height + 1):
+        for i in range(self.world._height + 1):
             self.ax.axhline(i, color="gray", linewidth=0.5, alpha=0.5)
 
         # Draw robot
-        rx = self.world.robot_x + 0.5
-        ry = self.world.robot_y + 0.5
+        rx = self.world._robot_x + 0.5
+        ry = self.world._robot_y + 0.5
         # Body circle
         body = Circle((rx, ry), 0.25, color="red", zorder=5)
         self.ax.add_patch(body)
         # Direction arrow
-        angle_rad = [math.pi / 2, 0, -math.pi / 2, math.pi][self.world.robot_dir]
+        angle_rad = [math.pi / 2, 0, -math.pi / 2, math.pi][self.world._robot_dir]
         dx = 0.3 * math.cos(angle_rad)
         dy = -0.3 * math.sin(angle_rad)
         arrow = FancyArrow(rx, ry, dx, dy, width=0.08, head_width=0.15,
                            head_length=0.08, fc="darkred", ec="darkred", zorder=6)
         self.ax.add_patch(arrow)
 
-        self.ax.set_xlim(0, self.world.width)
-        self.ax.set_ylim(self.world.height, 0)
+        self.ax.set_xlim(0, self.world._width)
+        self.ax.set_ylim(self.world._height, 0)
         self.ax.set_aspect("equal")
-        self.ax.set_xticks(range(self.world.width))
-        self.ax.set_yticks(range(self.world.height))
+        self.ax.set_xticks(range(self.world._width))
+        self.ax.set_yticks(range(self.world._height))
         self.ax.tick_params(labelsize=7)
 
         self.canvas.draw()
         self._update_inventory_label()
 
-    def grid_val(self, x, y):
-        return int(self.world.grid[y, x])
+    def _grid_val(self, x, y):
+        return int(self.world._grid[y, x])
 
     def _update_inventory_label(self):
-        if self.world.robot_inventory is None:
+        if self.world._robot_inventory is None:
             self.inventory_label.config(text="Inventory: empty")
-        elif self.world.robot_inventory == CELL_KEY:
+        elif self.world._robot_inventory == CELL_KEY:
             self.inventory_label.config(text="Inventory: Key")
         else:
-            self.inventory_label.config(text=f"Inventory: #{self.world.robot_inventory}")
+            self.inventory_label.config(text=f"Inventory: #{self.world._robot_inventory}")
 
     # --- Robot actions ---
     def _action_forward(self):
-        self.world.move_forward()
+        self.world.do_action(0)
         self._render()
 
     def _action_backward(self):
-        self.world.move_backward()
+        self.world.do_action(1)
         self._render()
 
     def _action_turn_left(self):
-        self.world.turn_left()
+        self.world.do_action(2)
         self._render()
 
     def _action_turn_right(self):
-        self.world.turn_right()
+        self.world.do_action(3)
         self._render()
 
     def _action_pickup(self):
-        success = self.world.pickup()
+        success = self.world.do_action(4)
         self._render()
         if not success:
             self.inventory_label.config(text="Inventory: (nothing to pick up)")
 
     def _action_use(self):
-        success = self.world.use_object()
+        success = self.world.do_action(5)
         self._render()
         if not success:
             self.inventory_label.config(text="Inventory: (can't use here)")
 
     def _action_drop(self):
-        success = self.world.drop_object()
+        success = self.world.do_action(6)
         self._render()
         if not success:
             self.inventory_label.config(text="Inventory: (can't drop here)")
@@ -465,7 +497,7 @@ class GridWorldEditor:
         print("Observation:")
         print(f"  Pose: x={obs['pose'][0]}, y={obs['pose'][1]}, yaw={obs['pose'][2]}")
         print(f"  Inventory: {obs['inventory']}")
-        print(f"  Grid ({self.world.height}x{self.world.width}):")
+        print(f"  Grid ({self.world._height}x{self.world._width}):")
         print(obs["grid"])
         print("=" * 40)
 
@@ -507,26 +539,11 @@ class GridWorldEditor:
         self.root.destroy()
 
     # --- Public API ---
-    # Action indices:
-    #   0=forward, 1=backward, 2=turn_left, 3=turn_right,
-    #   4=pickup, 5=use_object, 6=drop
-    ACTIONS = ["forward", "backward", "turn_left", "turn_right",
-               "pickup", "use_object", "drop"]
+    ACTIONS = GridWorld.ACTIONS
 
     def do_action(self, action_id):
-        """Execute a robot action by integer index. Returns True if action had effect."""
-        handlers = [
-            self.world.move_forward,
-            self.world.move_backward,
-            self.world.turn_left,
-            self.world.turn_right,
-            self.world.pickup,
-            self.world.use_object,
-            self.world.drop_object,
-        ]
-        if not 0 <= action_id < len(handlers):
-            raise ValueError(f"action_id must be 0-{len(handlers)-1}, got {action_id}")
-        result = handlers[action_id]()
+        """Execute a robot action by integer index. Returns result of action."""
+        result = self.world.do_action(action_id)
         self._render()
         return result
 
