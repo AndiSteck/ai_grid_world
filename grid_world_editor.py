@@ -171,10 +171,11 @@ class GridWorld:
                         self.grid[y, x] = CELL_DOOR_CLOSED
 
     def get_observation(self):
-        """Return observation: grid values (0-15) and robot pose (x, y, yaw)."""
+        """Return observation: grid values (0-15), robot pose (x, y, yaw), and inventory."""
         return {
             "grid": self.grid.copy(),
             "pose": (self.robot_x, self.robot_y, self.robot_dir),
+            "inventory": self.robot_inventory,  # None or cell type (e.g. 14 = key)
         }
 
     def save_png(self, filepath):
@@ -464,6 +465,7 @@ class GridWorldEditor:
         print("=" * 40)
         print("Observation:")
         print(f"  Pose: x={obs['pose'][0]}, y={obs['pose'][1]}, yaw={obs['pose'][2]}")
+        print(f"  Inventory: {obs['inventory']}")
         print(f"  Grid ({self.world.height}x{self.world.width}):")
         print(obs["grid"])
         print("=" * 40)
