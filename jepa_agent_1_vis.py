@@ -85,15 +85,20 @@ def encode_action(action_id):
 # ----------------------------
 # Nearest-neighbor observation lookup
 # ----------------------------
-def build_observation_database(target_encoder, world_path):
+def build_observation_database(target_encoder, world):
     """Collect all reachable observations and their target embeddings.
 
     Enumerates all valid (position, direction) combinations in the world.
+    Accepts a GridWorld instance or a file path string.
     """
     obs_list = []
 
-    w = GridWorld()
-    w.load_png(world_path)
+    if isinstance(world, str):
+        w = GridWorld()
+        w.load_png(world)
+    else:
+        w = world
+
     for sy in range(10):
         for sx in range(10):
             if w._grid[sy, sx] == CELL_WALL:
@@ -140,7 +145,7 @@ class JEPAVisualizer:
         self.z_database = None    # target encoder embeddings
         self.predicted_obs = None
         self.last_match_score = None
-        self.multi_step = False  # if True, chain predictions; if False, fresh encode each step
+        self.world_dirty = False  # True when world was modified since last obs DB build
 
         # Main window
         self.root = tk.Tk()
@@ -189,17 +194,19 @@ class JEPAVisualizer:
         tk.Label(tool_frame, text="", height=0).pack()
         tk.Label(tool_frame, text="Actions", font=("Arial", 10, "bold")).pack(pady=(3, 3))
 
-        tk.Button(tool_frame, text="Forward", width=12,
-                  command=lambda: self._do_action(0)).pack(pady=1)
-        tk.Button(tool_frame, text="Backward", width=12,
-                  command=lambda: self._do_action(1)).pack(pady=1)
-        tk.Button(tool_frame, text="Turn Left", width=12,
-                  command=lambda: self._do_action(2)).pack(pady=1)
-        tk.Button(tool_frame, text="Turn Right", width=12,
-                  command=lambda: self._do_action(3)).pack(pady=1)
+        self.action_buttons = []
+        for label, aid in [("Forward", 0), ("Backward", 1), ("Turn Left", 2), ("Turn Right", 3)]:
+            btn = tk.Button(tool_frame, text=label, width=12,
+                            command=lambda a=aid: self._do_action(a))
+            btn.pack(pady=1)
+            self.action_buttons.append(btn)
 
         # Status section
         tk.Label(tool_frame, text="", height=0).pack()
+        self.rebuild_btn = tk.Button(tool_frame, text="Rebuild Obs DB", width=12,
+                                     command=self._rebuild_obs_database, state=tk.DISABLED)
+        self.rebuild_btn.pack(pady=3)
+
         self.match_label = tk.Label(tool_frame, text="Match: --", font=("Arial", 9, "bold"))
         self.match_label.pack(pady=1)
 
@@ -278,6 +285,7 @@ class JEPAVisualizer:
         else:
             self.drawing = True
             self.world._grid[gy, gx] = self.current_tool
+            self._mark_world_dirty()
         self._render()
 
     def _on_canvas_motion(self, event):
@@ -287,6 +295,7 @@ class JEPAVisualizer:
         if gx is None:
             return
         self.world._grid[gy, gx] = self.current_tool
+        self._mark_world_dirty()
         self._render()
 
     def _on_canvas_release(self, event):
@@ -332,6 +341,32 @@ class JEPAVisualizer:
         self.predicted_obs = None
         self.last_match_score = None
         self._render()
+
+    def _mark_world_dirty(self):
+        """Mark world as modified, disable actions until obs DB is rebuilt."""
+        if not self.world_dirty:
+            self.world_dirty = True
+            for btn in self.action_buttons:
+                btn.config(state=tk.DISABLED)
+            if self.target_encoder is not None:
+                self.rebuild_btn.config(state=tk.NORMAL)
+
+    def _rebuild_obs_database(self):
+        """Rebuild observation database from current world state."""
+        if self.target_encoder is None:
+            return
+        # Save/restore robot pose since build enumerates all poses
+        obs = self.world.get_observation()
+        rx, ry, rd = obs["pose"]
+        self.obs_database, self.z_database = build_observation_database(
+            self.target_encoder, self.world)
+        self.world.set_start_pose(rx, ry, rd)
+        self.world_dirty = False
+        self.rebuild_btn.config(state=tk.DISABLED)
+        for btn in self.action_buttons:
+            btn.config(state=tk.NORMAL)
+        self.model_label.config(
+            text=f"Model: {len(self.obs_database)} states (rebuilt)")
 
     # --- Rendering ---
     def _render(self):
