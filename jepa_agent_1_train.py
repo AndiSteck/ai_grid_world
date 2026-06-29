@@ -30,9 +30,9 @@ INPUT_DIM = 103  # 100 grid cells + x + y + dir
 
 # Training params
 NUM_TRAJECTORIES = 100
-TRAJECTORY_LEN = 1000
+TRAJECTORY_LEN = 10000
 BATCH_SIZE = 256
-EPOCHS = 25
+EPOCHS = 50
 LR = 5e-4
 EMA_DECAY = 0.99
 
@@ -215,7 +215,7 @@ def train():
         avg_loss = epoch_loss / n_batches
         losses.append(avg_loss)
 
-        print(f"  Epoch {epoch:3d}/{EPOCHS} | loss = {avg_loss:.6f} | lr = {scheduler.get_last_lr()[0]:.6f}")
+        print(f"  Epoch {epoch:3d}/{EPOCHS} | loss = {avg_loss:.10f} | lr = {scheduler.get_last_lr()[0]:.6f}")
 
     print(f"\nFinal loss: {losses[-1]:.6f}")
     train_time = time.time() - train_start
