@@ -19,9 +19,8 @@ from matplotlib.patches import FancyArrow, Circle
 import sys
 sys.path.insert(0, "/workspaces/python_play")
 from grid_world_editor import (
-    GridWorld, VGA_PALETTE, CELL_WALL, CELL_GOAL, CELL_DOOR_CLOSED,
-    CELL_DOOR_OPEN, CELL_KEY, CELL_EMPTY, TOOL_NAMES,
-    DIR_NORTH, DIR_EAST, DIR_SOUTH, DIR_WEST, DIR_DX, DIR_DY,
+    GridWorld, VGA_PALETTE, CELL_WALL, CELL_EMPTY, TOOL_NAMES,
+    DIR_NORTH, DIR_EAST, DIR_SOUTH, DIR_WEST,
 )
 
 
@@ -30,8 +29,8 @@ from grid_world_editor import (
 # ----------------------------
 EMBED_DIM = 64
 HIDDEN_DIM = 128
-NUM_ACTIONS = 7
-INPUT_DIM = 104
+NUM_ACTIONS = 4  # forward, backward, turn_left, turn_right
+INPUT_DIM = 103  # 100 grid cells + x + y + dir
 
 
 class Encoder(nn.Module):
@@ -69,16 +68,15 @@ class Predictor(nn.Module):
 # Encoding / Decoding helpers
 # ----------------------------
 def encode_observation(obs):
-    """Encode observation dict to flat tensor (104,)."""
+    """Encode observation dict to flat tensor (103,)."""
     grid = obs["grid"].flatten().astype(np.float32) / 15.0
     x, y, d = obs["pose"]
     pose = np.array([x / 9.0, y / 9.0, d / 3.0], dtype=np.float32)
-    inv = np.array([1.0 if obs["inventory"] is not None else 0.0], dtype=np.float32)
-    return torch.from_numpy(np.concatenate([grid, pose, inv]))
+    return torch.from_numpy(np.concatenate([grid, pose]))
 
 
 def encode_action(action_id):
-    """One-hot encode action (7,)."""
+    """One-hot encode action (4,)."""
     v = torch.zeros(NUM_ACTIONS)
     v[action_id] = 1.0
     return v
@@ -88,31 +86,21 @@ def encode_action(action_id):
 # Nearest-neighbor observation lookup (like jepa_grid.py)
 # ----------------------------
 def build_observation_database(target_encoder, world_path):
-    """Collect all reachable observations and their target embeddings."""
-    import random
+    """Collect all reachable observations and their target embeddings.
 
+    Enumerates all valid (position, direction) combinations in the world.
+    """
     obs_list = []
-    seen_keys = set()
 
-    # Explore extensively from all starting positions
-    for sx in range(10):
-        for sy in range(10):
+    w = GridWorld()
+    w.load_png(world_path)
+    for sy in range(10):
+        for sx in range(10):
+            if w._grid[sy, sx] == CELL_WALL:
+                continue
             for sd in range(4):
-                w = GridWorld()
-                w.load_png(world_path)
                 w.set_start_pose(sx, sy, sd)
-                obs = w.get_observation()
-                key = (obs["grid"].tobytes(), obs["pose"], obs["inventory"])
-                if key not in seen_keys:
-                    seen_keys.add(key)
-                    obs_list.append(obs)
-                for _ in range(100):
-                    w.do_action(random.randint(0, 6))
-                    obs = w.get_observation()
-                    key = (obs["grid"].tobytes(), obs["pose"], obs["inventory"])
-                    if key not in seen_keys:
-                        seen_keys.add(key)
-                        obs_list.append(obs)
+                obs_list.append(w.get_observation())
 
     # Encode all observations with target encoder
     encoded = torch.stack([encode_observation(o) for o in obs_list])
@@ -209,18 +197,9 @@ class JEPAVisualizer:
                   command=lambda: self._do_action(2)).pack(pady=1)
         tk.Button(tool_frame, text="Turn Right", width=12,
                   command=lambda: self._do_action(3)).pack(pady=1)
-        tk.Button(tool_frame, text="Pickup", width=12,
-                  command=lambda: self._do_action(4)).pack(pady=1)
-        tk.Button(tool_frame, text="Use Object", width=12,
-                  command=lambda: self._do_action(5)).pack(pady=1)
-        tk.Button(tool_frame, text="Drop", width=12,
-                  command=lambda: self._do_action(6)).pack(pady=1)
 
         # Status section
         tk.Label(tool_frame, text="", height=0).pack()
-        self.inventory_label = tk.Label(tool_frame, text="Inv: empty", font=("Arial", 9))
-        self.inventory_label.pack(pady=1)
-
         self.match_label = tk.Label(tool_frame, text="Match: --", font=("Arial", 9, "bold"))
         self.match_label.pack(pady=1)
 
@@ -415,29 +394,17 @@ class JEPAVisualizer:
         ax.set_title(title, fontsize=10)
 
     def _update_status(self):
-        # Inventory
         obs = self.world.get_observation()
-        if obs["inventory"] is None:
-            self.inventory_label.config(text="Inv: empty")
-        elif obs["inventory"] == CELL_KEY:
-            self.inventory_label.config(text="Inv: Key")
-        else:
-            self.inventory_label.config(text=f"Inv: #{obs['inventory']}")
 
         # Match indicator - compare predicted obs with actual obs
         if self.last_match_score is None or self.predicted_obs is None:
             self.match_label.config(text="Match: --", fg="black")
         else:
-            # Check if predicted grid/pose matches actual
-            grid_match = np.array_equal(obs["grid"], self.predicted_obs["grid"])
             pose_match = obs["pose"] == self.predicted_obs["pose"]
-            if grid_match and pose_match:
+            if pose_match:
                 self.match_label.config(text="Match: CORRECT", fg="green")
-            elif grid_match:
-                self.match_label.config(text="Match: grid OK, pose WRONG", fg="orange")
             else:
-                cells_ok = (obs["grid"] == self.predicted_obs["grid"]).sum()
-                self.match_label.config(text=f"Match: {cells_ok}/100 cells", fg="red")
+                self.match_label.config(text="Match: WRONG", fg="red")
 
     # --- File operations ---
     def _load_world(self):

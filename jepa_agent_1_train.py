@@ -25,14 +25,14 @@ OUTPUT_DIR = "/workspaces/python_play/jepa1"
 
 EMBED_DIM = 64
 HIDDEN_DIM = 128
-NUM_ACTIONS = 7
-INPUT_DIM = 104  # 100 grid cells + x + y + dir + inventory
+NUM_ACTIONS = 4  # forward, backward, turn_left, turn_right
+INPUT_DIM = 103  # 100 grid cells + x + y + dir
 
 # Training params
 NUM_TRAJECTORIES = 100
-TRAJECTORY_LEN = 10000
+TRAJECTORY_LEN = 1000
 BATCH_SIZE = 256
-EPOCHS = 30
+EPOCHS = 25
 LR = 5e-4
 EMA_DECAY = 0.99
 
@@ -41,16 +41,15 @@ EMA_DECAY = 0.99
 # Observation encoding
 # ----------------------------
 def encode_observation(obs):
-    """Encode observation dict to flat tensor (104,)."""
+    """Encode observation dict to flat tensor (103,)."""
     grid = obs["grid"].flatten().astype(np.float32) / 15.0  # normalize to [0, 1]
     x, y, d = obs["pose"]
     pose = np.array([x / 9.0, y / 9.0, d / 3.0], dtype=np.float32)
-    inv = np.array([1.0 if obs["inventory"] is not None else 0.0], dtype=np.float32)
-    return torch.from_numpy(np.concatenate([grid, pose, inv]))
+    return torch.from_numpy(np.concatenate([grid, pose]))
 
 
 def encode_action(action_id):
-    """One-hot encode action (7,)."""
+    """One-hot encode action (4,)."""
     v = torch.zeros(NUM_ACTIONS)
     v[action_id] = 1.0
     return v
@@ -99,11 +98,10 @@ def collect_trajectories(num_traj, traj_len):
     for _ in range(num_traj):
         w = GridWorld()
         w.load_png(WORLD_PATH)
-        # Random start pose on any valid cell (both sides of wall)
+        # Random start pose on any valid cell
         while True:
             start_x = random.randint(0, 9)
             start_y = random.randint(0, 9)
-            # Skip walls/doors - robot must start on walkable cell
             obs_check = w.get_observation()
             if obs_check["grid"][start_y, start_x] in (15, 2):  # empty or goal
                 break
@@ -118,6 +116,7 @@ def collect_trajectories(num_traj, traj_len):
             data.append((obs, action, next_obs))
             obs = next_obs
     return data
+
 
 
 # ----------------------------
@@ -137,6 +136,7 @@ def train():
     # Collect data
     print("\nCollecting trajectories...")
     raw_data = collect_trajectories(NUM_TRAJECTORIES, TRAJECTORY_LEN)
+    random.shuffle(raw_data)
     print(f"  Total transitions: {len(raw_data)}")
 
     # Pre-encode all data
@@ -161,11 +161,13 @@ def train():
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
 
     # Training loop
-    print("\nTraining...")
     n_samples = len(raw_data)
     losses = []
     train_start = time.time()
-    print(f"  Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    VAR_WEIGHT = 0.0    # variance regularization weight (disabled - rely on oversampling)
+    VAR_GAMMA = 0.01   # target std per dimension (mild spread)
 
     for epoch in range(EPOCHS):
         # Shuffle
@@ -186,8 +188,15 @@ def train():
             with torch.no_grad():
                 z_target = target_encoder(next_obs_b)
 
-            # Loss: MSE in embedding space
-            loss = ((z_pred - z_target) ** 2).mean()
+            # Prediction loss: MSE in embedding space
+            pred_loss = ((z_pred - z_target) ** 2).mean()
+
+            # Variance regularization (VICReg-style):
+            # Ensure each dimension of z has sufficient variance
+            z_std = z.std(dim=0)
+            var_loss = torch.relu(VAR_GAMMA - z_std).mean()
+
+            loss = pred_loss + VAR_WEIGHT * var_loss
 
             optimizer.zero_grad()
             loss.backward()
@@ -206,8 +215,7 @@ def train():
         avg_loss = epoch_loss / n_batches
         losses.append(avg_loss)
 
-        if epoch % 10 == 0 or epoch == EPOCHS - 1:
-            print(f"  Epoch {epoch:3d}/{EPOCHS} | loss = {avg_loss:.6f} | lr = {scheduler.get_last_lr()[0]:.6f}")
+        print(f"  Epoch {epoch:3d}/{EPOCHS} | loss = {avg_loss:.6f} | lr = {scheduler.get_last_lr()[0]:.6f}")
 
     print(f"\nFinal loss: {losses[-1]:.6f}")
     train_time = time.time() - train_start
@@ -281,6 +289,7 @@ def train():
         "num_actions": NUM_ACTIONS,
         "num_trajectories": NUM_TRAJECTORIES,
         "trajectory_len": TRAJECTORY_LEN,
+        "total_transitions": len(raw_data),
         "epochs": EPOCHS,
         "batch_size": BATCH_SIZE,
         "lr": LR,
