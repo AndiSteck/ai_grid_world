@@ -83,7 +83,7 @@ def encode_action(action_id):
 
 
 # ----------------------------
-# Nearest-neighbor observation lookup (like jepa_grid.py)
+# Nearest-neighbor observation lookup
 # ----------------------------
 def build_observation_database(target_encoder, world_path):
     """Collect all reachable observations and their target embeddings.
