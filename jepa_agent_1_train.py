@@ -1,5 +1,5 @@
 """
-JEPA training on world1.png grid world.
+JEPA training on random grid worlds.
 Trains an encoder + predictor with EMA target encoder.
 Saves model + metadata to jepa1/jepa_<timestamp>.pt
 """
@@ -15,26 +15,26 @@ import torch.nn as nn
 import torch.optim as optim
 
 sys.path.insert(0, "/workspaces/python_play")
-from grid_world_editor import GridWorld, DIR_EAST
+from grid_world_editor import GridWorld, DIR_EAST, CELL_WALL, CELL_EMPTY, CELL_GOAL
 
 # ----------------------------
 # Config
 # ----------------------------
-WORLD_PATH = "/workspaces/python_play/worlds/world1.png"
 OUTPUT_DIR = "/workspaces/python_play/jepa1"
 
-EMBED_DIM = 64
-HIDDEN_DIM = 128
+EMBED_DIM = 128
+HIDDEN_DIM = 256
 NUM_ACTIONS = 4  # forward, backward, turn_left, turn_right
 INPUT_DIM = 103  # 100 grid cells + x + y + dir
 
 # Training params
-NUM_TRAJECTORIES = 100
-TRAJECTORY_LEN = 10000
+NUM_TRAJECTORIES = 1000
+TRAJECTORY_LEN = 1000
+MAX_INNER_WALLS = 16
 BATCH_SIZE = 256
 EPOCHS = 50
 LR = 5e-4
-EMA_DECAY = 0.99
+EMA_DECAY = 0.996
 
 
 # ----------------------------
@@ -92,19 +92,44 @@ class Predictor(nn.Module):
 # ----------------------------
 # Data collection
 # ----------------------------
+def generate_random_world():
+    """Generate a random 10x10 world with wall border, 1 goal, up to 16 inner walls."""
+    w = GridWorld()
+    grid = w._grid
+
+    # Fill border with walls
+    grid[0, :] = CELL_WALL
+    grid[9, :] = CELL_WALL
+    grid[:, 0] = CELL_WALL
+    grid[:, 9] = CELL_WALL
+
+    # Inner 8x8 starts as empty (already default)
+    # Place random inner walls (0 to MAX_INNER_WALLS)
+    num_walls = random.randint(0, MAX_INNER_WALLS)
+    inner_cells = [(x, y) for y in range(1, 9) for x in range(1, 9)]
+    wall_cells = random.sample(inner_cells, num_walls)
+    for wx, wy in wall_cells:
+        grid[wy, wx] = CELL_WALL
+
+    # Place one goal on a remaining empty cell
+    empty_cells = [(x, y) for x, y in inner_cells if grid[y, x] == CELL_EMPTY]
+    gx, gy = random.choice(empty_cells)
+    grid[gy, gx] = CELL_GOAL
+
+    return w
+
+
 def collect_trajectories(num_traj, traj_len):
-    """Collect random trajectories as (obs, action, next_obs) tuples."""
+    """Collect random trajectories as (obs, action, next_obs) tuples.
+    Each trajectory uses a freshly generated random world."""
     data = []
     for _ in range(num_traj):
-        w = GridWorld()
-        w.load_png(WORLD_PATH)
-        # Random start pose on any valid cell
-        while True:
-            start_x = random.randint(0, 9)
-            start_y = random.randint(0, 9)
-            obs_check = w.get_observation()
-            if obs_check["grid"][start_y, start_x] in (15, 2):  # empty or goal
-                break
+        w = generate_random_world()
+
+        # Random start pose on any walkable cell
+        empty_cells = [(x, y) for y in range(1, 9) for x in range(1, 9)
+                       if w._grid[y, x] in (CELL_EMPTY, CELL_GOAL)]
+        start_x, start_y = random.choice(empty_cells)
         start_dir = random.randint(0, 3)
         w.set_start_pose(start_x, start_y, start_dir)
 
@@ -124,11 +149,12 @@ def collect_trajectories(num_traj, traj_len):
 # ----------------------------
 def train():
     print("=" * 60)
-    print("JEPA Training on world1.png")
+    print("JEPA Training on random grid worlds")
     print(f"  Embed dim: {EMBED_DIM}")
     print(f"  Hidden dim: {HIDDEN_DIM}")
     print(f"  Input dim: {INPUT_DIM}")
     print(f"  Trajectories: {NUM_TRAJECTORIES} x {TRAJECTORY_LEN} steps")
+    print(f"  Max inner walls: {MAX_INNER_WALLS}")
     print(f"  Epochs: {EPOCHS}, Batch size: {BATCH_SIZE}, LR: {LR}")
     print(f"  EMA decay: {EMA_DECAY}")
     print("=" * 60)
@@ -166,10 +192,11 @@ def train():
     train_start = time.time()
     print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-    VAR_WEIGHT = 0.0    # variance regularization weight (disabled - rely on oversampling)
+    VAR_WEIGHT = 0.04   # variance regularization weight
     VAR_GAMMA = 0.01   # target std per dimension (mild spread)
 
     for epoch in range(EPOCHS):
+        epoch_start = time.time()
         # Shuffle
         perm = torch.randperm(n_samples)
         epoch_loss = 0.0
@@ -215,7 +242,8 @@ def train():
         avg_loss = epoch_loss / n_batches
         losses.append(avg_loss)
 
-        print(f"  Epoch {epoch:3d}/{EPOCHS} | loss = {avg_loss:.10f} | lr = {scheduler.get_last_lr()[0]:.6f}")
+        epoch_time = time.time() - epoch_start
+        print(f"  Epoch {epoch:3d}/{EPOCHS} | loss = {avg_loss:.10f} | lr = {scheduler.get_last_lr()[0]:.6f} | {epoch_time:.1f}s")
 
     print(f"\nFinal loss: {losses[-1]:.6f}")
     train_time = time.time() - train_start
@@ -233,9 +261,8 @@ def train():
     predictor.eval()
 
     # Test 1: Same observation should give similar embeddings
-    w = GridWorld()
-    w.load_png(WORLD_PATH)
-    w.set_start_pose(0, 0, DIR_EAST)
+    w = generate_random_world()
+    w.set_start_pose(1, 1, DIR_EAST)
     obs1 = w.get_observation()
     z1 = encoder(encode_observation(obs1).unsqueeze(0))
     z1b = encoder(encode_observation(obs1).unsqueeze(0))
@@ -250,8 +277,7 @@ def train():
     print(f"  Different obs embedding diff: {diff_diff:.6f} (should be > 0)")
 
     # Test 3: Predictor accuracy on known transition
-    w2 = GridWorld()
-    w2.load_png(WORLD_PATH)
+    w2 = generate_random_world()
     w2.set_start_pose(1, 1, DIR_EAST)
     obs_before = w2.get_observation()
     w2.do_action(0)  # forward
@@ -282,7 +308,8 @@ def train():
 
     metadata = {
         "timestamp": timestamp,
-        "world": WORLD_PATH,
+        "world": "random",
+        "max_inner_walls": MAX_INNER_WALLS,
         "embed_dim": EMBED_DIM,
         "hidden_dim": HIDDEN_DIM,
         "input_dim": INPUT_DIM,

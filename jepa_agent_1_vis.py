@@ -27,8 +27,8 @@ from grid_world_editor import (
 # ----------------------------
 # Model definitions (must match training)
 # ----------------------------
-EMBED_DIM = 64
-HIDDEN_DIM = 128
+EMBED_DIM = 128
+HIDDEN_DIM = 256
 NUM_ACTIONS = 4  # forward, backward, turn_left, turn_right
 INPUT_DIM = 103  # 100 grid cells + x + y + dir
 
@@ -499,6 +499,9 @@ class JEPAVisualizer:
             # Build observation database for nearest-neighbor lookup
             metadata = checkpoint.get("metadata", {})
             world_path = metadata.get("world", self.current_file)
+            # "random" means model was trained on random worlds, not a specific file
+            if world_path == "random":
+                world_path = self.current_file
             if world_path:
                 self.model_label.config(text=f"Model: building obs database...")
                 self.root.update()
