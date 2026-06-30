@@ -28,11 +28,11 @@ NUM_ACTIONS = 4  # forward, backward, turn_left, turn_right
 INPUT_DIM = 103  # 100 grid cells + x + y + dir
 
 # Training params
-NUM_TRAJECTORIES = 1000
+NUM_TRAJECTORIES = 10000
 TRAJECTORY_LEN = 1000
 MAX_INNER_WALLS = 16
 BATCH_SIZE = 256
-EPOCHS = 50
+EPOCHS = 100
 LR = 5e-4
 EMA_DECAY = 0.996
 
