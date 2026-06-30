@@ -496,8 +496,23 @@ class JEPAVisualizer:
             self.predicted_obs = None
             self.last_match_score = None
 
-            # Build observation database for nearest-neighbor lookup
+            # Print metadata to terminal
             metadata = checkpoint.get("metadata", {})
+            print(f"\n{'=' * 60}")
+            print(f"JEPA Model: {filepath}")
+            print(f"{'=' * 60}")
+            for k, v in metadata.items():
+                if k == "loss_history":
+                    print(f"  {k}: [{v[0]:.6f} ... {v[-1]:.6f}] ({len(v)} epochs)")
+                elif k == "tests":
+                    print(f"  {k}:")
+                    for tk_, tv in v.items():
+                        print(f"    {tk_}: {tv}")
+                else:
+                    print(f"  {k}: {v}")
+            print(f"{'=' * 60}\n")
+
+            # Build observation database for nearest-neighbor lookup
             world_path = metadata.get("world", self.current_file)
             # "random" means model was trained on random worlds, not a specific file
             if world_path == "random":
